@@ -24,10 +24,15 @@ def build_torch_feature_extractor(name, **kwargs):
 
 # -----------------------------------------------------------------------------
 
+# @register_torch
+# def virchow(weights, **kwargs):
+#     from .virchow import VirchowFeatures
+#     return VirchowFeatures(weights, **kwargs)
+
 @register_torch
-def virchow(weights, **kwargs):
+def virchow( **kwargs):
     from .virchow import VirchowFeatures
-    return VirchowFeatures(weights, **kwargs)
+    return VirchowFeatures( **kwargs)
 
 @register_torch
 def vit(**kwargs):

@@ -68,6 +68,7 @@ class WSI:
         simplify_roi_tolerance: Optional[float] = None,
         artifact_labels: Optional[List[str]] = None,
         disable_grid: bool = False,
+        ignore_missing_mpp: bool = True,
         **reader_kwargs: Any
     ) -> None:
         """Loads slide and ROI(s).
@@ -214,7 +215,10 @@ class WSI:
             )
 
         # Collect basic slide information
+        # if ignore_missing_mpp:
         if not self.slide.has_mpp:
+            # mpp = get_mpp()
+            mpp = 0.25
             raise errors.SlideMissingMPPError(
                 f"Slide {self.path} missing MPP ({OPS_MPP_X})"
             )

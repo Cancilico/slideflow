@@ -44,14 +44,46 @@ class VirchowFeatures(TorchFeatureExtractor):
 }
 """
 
-    def __init__(self, weights, device='cuda', **kwargs):
+    # def __init__(self, weights, device='cuda', **kwargs):
+    #     super().__init__(**kwargs)
+
+    #     from slideflow.model import torch_utils
+
+    #     self.device = torch_utils.get_device(device)
+    #     self.model = timm.create_model(    
+    #         "vit_huge_patch14_224", # NOTE: Pretrained on ImageNet-21k https://huggingface.co/timm/vit_huge_patch14_224.orig_in21k                  
+    #         img_size=224,
+    #         patch_size=14,
+    #         init_values=1e-5,
+    #         num_classes=0,
+    #         mlp_ratio=5.3375,
+    #         global_pool="",
+    #         mlp_layer=SwiGLUPacked,
+    #         act_layer=torch.nn.SiLU
+    #     )
+    #     td = torch.load(weights, map_location=self.device)
+    #     self.model.load_state_dict(td, strict=True)
+    #     self.model.to(self.device)
+    #     self.model.eval()
+
+    #     # ---------------------------------------------------------------------
+    #     self.num_features = 2560
+
+    #     # Note that Virchow uses bicubic interpolation
+    #     # https://huggingface.co/paige-ai/Virchow/blob/main/config.json
+    #     self.transform = self.build_transform(img_size=224, interpolation='bicubic')
+    #     self.preprocess_kwargs = dict(standardize=False)
+    #     self._weights = weights
+
+    def __init__(self, device='cuda', **kwargs):
         super().__init__(**kwargs)
 
         from slideflow.model import torch_utils
 
         self.device = torch_utils.get_device(device)
-        self.model = timm.create_model(
-            "vit_huge_patch14_224",
+        self.model = timm.create_model(            
+            "hf-hub:paige-ai/Virchow2",
+            pretrained=True,                        
             img_size=224,
             patch_size=14,
             init_values=1e-5,
@@ -61,8 +93,8 @@ class VirchowFeatures(TorchFeatureExtractor):
             mlp_layer=SwiGLUPacked,
             act_layer=torch.nn.SiLU
         )
-        td = torch.load(weights, map_location=self.device)
-        self.model.load_state_dict(td, strict=True)
+        # td = torch.load(weights, map_location=self.device)
+        # self.model.load_state_dict(td, strict=True)
         self.model.to(self.device)
         self.model.eval()
 
@@ -73,7 +105,7 @@ class VirchowFeatures(TorchFeatureExtractor):
         # https://huggingface.co/paige-ai/Virchow/blob/main/config.json
         self.transform = self.build_transform(img_size=224, interpolation='bicubic')
         self.preprocess_kwargs = dict(standardize=False)
-        self._weights = weights
+        # self._weights = weights
 
     def _process_output(self, output):
         """Concatenate class and patch tokens into a single embedding."""
@@ -91,5 +123,5 @@ class VirchowFeatures(TorchFeatureExtractor):
         """
         return self._dump_config(
             class_name='slideflow.model.extractors.virchow.VirchowFeatures',
-            weights=self._weights
+            # weights=self._weights
         )
