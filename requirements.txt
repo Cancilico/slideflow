@@ -1,6 +1,6 @@
 numpy
 gast>=0.3.3
-tensorflow>=2.7,<2.12
+tensorflow>=2.7,<2.18
 scipy
 scikit-learn
 matplotlib>=3.2
