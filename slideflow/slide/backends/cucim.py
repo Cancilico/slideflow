@@ -289,7 +289,7 @@ class _cuCIMReader:
                         self._mpp = ps * 1000
                     elif spacing_unit in ('cm', 'centimeters'):
                         self._mpp = ps * 10000
-                    elif spacing_unit in ('um', 'microns', 'micrometers'):
+                    elif spacing_unit in ('um', 'microns', 'micrometer'):
                         self._mpp = ps
                     else:
                         continue
