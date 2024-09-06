@@ -16,18 +16,20 @@ warn_report*.txt
 slideflow.log
 .DS_Store
 
-notebooks**/
+# notebooks**/
 docs*/
 .yml
 .txt
 .html
 .mp4
 .webm
-.json
-.csv
+**.json
+**.csv
 .js
 .jpg
 .png
 .rst
+**.npz
+**.tfrecords
 panda_project/*
 datasets/panda/
