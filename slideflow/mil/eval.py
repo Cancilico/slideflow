@@ -77,15 +77,15 @@ def eval_mil(
 
     """
     if isinstance(bags, str):
-        utils._verify_compatible_tile_size(weights, bags)
-
+        utils._verify_compatible_tile_size(weights.split('models')[0], bags)
+    print('weights:', weights)
     model, config = utils.load_model_weights(weights, config)
     model.eval()
     params = {
         'model_path': weights,
         'eval_bags': bags,
         'eval_filters': dataset._filters,
-        'mil_params': sf.util.load_json(join(weights, 'mil_params.json'))
+        'mil_params': sf.util.load_json(join(weights.split('models')[0], 'mil_params.json'))
     }
     return config.eval(
         model,

@@ -48,8 +48,8 @@ def load_model_weights(
     """
     import torch
 
-    if exists(join(weights, 'mil_params.json')):
-        mil_params = sf.util.load_json(join(weights, 'mil_params.json'))
+    if exists(join(weights.split('models')[0], 'mil_params.json')):
+        mil_params = sf.util.load_json(join(weights.split('models')[0], 'mil_params.json'))
     else:
         mil_params = None
 
