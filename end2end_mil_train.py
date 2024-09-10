@@ -1,14 +1,31 @@
 """
-PANDA
+PANDA dataset
 
-root='panda_project',
-annotations="/mnt/d/github/slideflow/datasets/panda/pandas_tumor_subtyping_clean985.csv",
-slides='/mnt/d/DATA/PANDA/pandaChallege2020/prostate-cancer-grade-assessment_wsi/train_images',
-dataset_config='/mnt/d/github/slideflow/datasets/panda/panda_subtypes.json',
-name='panda_project'
-outdir='panda_project/bags/'
+python3 end2end_mil_train.py 
+--project_root_dir /mnt/d/github/slideflow/panda_project 
+--annotations //mnt/d/github/slideflow/datasets/panda/pandas_tumor_subtyping_clean985.csv 
+--slides_dir /mnt/d/DATA/PANDA/pandaChallege2020/prostate-cancer-grade-assessment_wsi/train_images 
+--dataset_config /mnt/d/github/slideflow/datasets/panda/panda_subtypes.json 
+--project_name panda_project 
+--tile-px 244 
+--quality-control otsu 
+--extractor_model resnet18_imagenet 
+--outdir_bags panda_project/feature_bags 
+--load_project 
+--load_dataset 
+--tile-um 112 
+--load_features 
+--train_mil 
+--val_fraction 0.1 
+--val_strategy fixed 
+--splits_config /mnt/d/github/slideflow/notebooks/split_config.json 
+--outdir_model panda_project/  
+--label_column label
+
 ------------------------------------------------------------------------------------------
-IDH1:
+IDH1 dataset:
+
+export SF_SLIDE_BACKEND=libvips
 
 python3 end2end_mil_train.py
 --project_root_dir idh1_project
@@ -20,9 +37,7 @@ python3 end2end_mil_train.py
 --tile-um 112
 --quality-control otsu
 --extractor_model ctranspath
---extractor_model_norm_mean [0.485, 0.456, 0.406]
---extractor_model_norm_std [0.229, 0.224, 0.225]
---outdir_bags idh1_project/bags
+--outdir_bags idh1_project/feature_bags
 --val_strategy fixed
 --val_fraction 0.2
 --model clam_sb
@@ -31,7 +46,6 @@ python3 end2end_mil_train.py
 """
 
 import time
-import ast
 import json
 import argparse
 
@@ -54,7 +68,11 @@ parser.add_argument('--project_name', type=str, default=None,
 parser.add_argument('--load_project', default=False, action="store_true", 
                     help='Load project')
 parser.add_argument('--load_dataset', default=False, action="store_true", 
-                    help='Load project')
+                    help='Load dataset')
+parser.add_argument('--load_features', default=False, action="store_true", 
+                    help='Load features')
+parser.add_argument('--train_mil', default=False, action="store_true", 
+                    help='To train MIL model')
 parser.add_argument('--tile-px', default = 2560, type=int,
                     help='Size of tiles to extract, in pixels.')
 parser.add_argument('--tile-um', default = "174", type = str,
@@ -63,10 +81,6 @@ parser.add_argument("-qc", "--quality-control", default='both',
                     help='Apply quality control to tiles, removing blurry or background tiles.  Options: otsu, blur,')
 parser.add_argument('--extractor_model', default = "ctranspath", type = str,
                     help='Select a feature extractor model')
-parser.add_argument('--extractor_model_norm_mean', default = None, type = str,
-                    help='Extractor specific transform: Mean')
-parser.add_argument('--extractor_model_norm_std', default = None, type = str,
-                    help='Extractor specific transform: standard deviation')
 parser.add_argument('--outdir_bags', type=str, default=None, 
                     help='Path to feature bags saving dir')
 parser.add_argument('--splits_config', type=str, default=None, 
@@ -77,7 +91,7 @@ parser.add_argument('--label_column', default = "label", type = str,
                     help='column name containg slide labels in teh annotation csv file')    
 parser.add_argument('--val_fraction', default = None, type = float,
                     help='Fraction of validation split') 
-parser.add_argument('--model', type=str, default=None, 
+parser.add_argument('--model', type=str, default='attention_mil', 
                     help='Select MIL model: attention_mil, transmil, bistro.transformer, clam_sb, clam_mb')  
 parser.add_argument('--lr', default = 1e-4, type = int,
                     help='learning rate (default: 0.0001)')
@@ -89,21 +103,10 @@ parser.add_argument('--outdir_model', type=str, default=None,
                     help='Path to save the mil model and predictions')            
 
 
-
 args = parser.parse_args()
 # tile_um can be int or str, but always comes as string from the command line. Convert digit-string to ints
 if args.tile_um is not None and args.tile_um.isdigit():
     args.tile_um = int(args.tile_um)
-
-# norm_mean = ast.literal_eval(args.extractor_model_norm_mean)
-# norm_std = ast.literal_eval(args.extractor_model_norm_std)
-
-# Convert the string representations of the lists to actual Python lists
-args.extractor_model_norm_mean = json.loads(args.extractor_model_norm_mean)
-args.extractor_model_norm_std = json.loads(args.extractor_model_norm_std)
-
-_ctraspath_norm_mean = [0.485, 0.456, 0.406]
-_ctraspath_norm_std = [0.229, 0.224, 0.225]
 
 
 def create_project(args):
@@ -123,7 +126,7 @@ def create_project(args):
     return P
     
 
-def extract_tiles(P, args):
+def extract_tile_dataset(P, args):
 
     # Part 02: Extract tiles from slides
     # P = sf.load_project('/mnt/d/github/slideflow/panda_project')
@@ -140,17 +143,46 @@ def extract_tiles(P, args):
     return dataset
 
 
+def filter_config(model_config, exclude_params):
+    """
+    Remove keys from model_config that are listed in exclude_params.
+    
+    :param model_config: Dictionary of the configuration parameters for a model.
+    :param exclude_params: List of keys to be excluded from the configuration.
+    :return: Filtered configuration dictionary.
+    """
+    return {k: v for k, v in model_config.items() if k not in exclude_params}
+
+def get_extractor_config(model_name, args):
+    """ Return specific configuration based on the model name """
+    # Base configuration applied to all models unless explicitly overwritten
+    base_config = {
+        'backend': 'torch',
+        'tile_px': args.tile_px,        
+    }
+    # Specific configurations for models that need unique settings
+    specific_configs = {
+        'inception_imagenet': {'resize': 224},  # Different resize for Inception
+        'ctranspath': {'resize': 224, 'center_crop': True, 'interpolation': 'bicubic', 'exclude': ['tile_px']},  # Exclude tile_px
+    }
+    # Retrieve specific configuration and handle exclusions if any
+    model_config = specific_configs.get(model_name, {})
+    exclude_params = model_config.pop('exclude', [])
+    filtered_config = filter_config({**base_config, **model_config}, exclude_params)
+    
+    return filtered_config
+
+
 def extract_features(args, dataset):
     start_extract_feats = time.time()
-    feature_extractor = sf.build_feature_extractor(args.extractor_model,
-                                            resize=224,
-                                            interpolation='bicubic',
-                                            norm_mean = args.extractor_model_norm_mean,
-                                            norm_std = args.extractor_model_norm_std,                                          
-                                            center_crop=True
-                                            )
+    # Get the specific configuration for the feature extractor
+    extractor_config = get_extractor_config(args.extractor_model, args)
+    # Build the feature extractor with the specific configuration
+    feature_extractor = sf.build_feature_extractor(args.extractor_model, **extractor_config)
+
+    outdir = f'{args.outdir_bags}/bags_{args.extractor_model}'
     dataset.generate_feature_bags(feature_extractor, 
-                                  outdir=args.outdir_bags
+                                  outdir = outdir
                                   )
     end_extract_feats = time.time()
     time_extract_feats = end_extract_feats - start_extract_feats
@@ -160,24 +192,33 @@ def extract_features(args, dataset):
 def create_splits(dataset, args):
     train, val = dataset.split(labels = args.label_column, 
                                val_strategy = args.val_strategy,
-                               val_fraction=0.1,
-                            #    splits= '/mnt/d/github/slideflow/notebooks/split_config.json',  
+                               val_fraction= args.val_fraction,
                                splits = args.splits_config,                           
                                )
     return train, val
 
 
-def train_mil(args,train, val ):
-    
-    # Part 05: Initialize MIL model    
-    config = mil_config(
-            model = args.model, #'clam_mb', #clam_sb
-            B=45,
-            lr = args.lr,    #1e-4,
-            batch_size = args.batch_size, #32,
-            epochs = args.epochs, #50,
-            fit_one_cycle=True
-        ) 
+def train_mil_features(args,train, val ):
+
+    config_args = {
+        'model': args.model,
+        'lr': args.lr,
+        'batch_size': args.batch_size,
+        'epochs': args.epochs,
+        'fit_one_cycle': True,
+    }
+
+    if args.model in ['clam_sb', 'clam_mb', 'mil_fc_mc']:
+        config_args['B'] = 45
+
+    # Configure the MIL model for the current combination
+    config = mil_config(**config_args)
+
+    bags_dir = f"{args.outdir_bags}/bags_{args.extractor_model}"
+    print('Loading feature bags from... ',bags_dir )
+    outdir = f"{args.outdir_model}/model_{args.model}_bags_{args.extractor_model}"
+    print('Saving model and result at... ',outdir )    
+
     # Part 06: Train MIL model
     start_train = time.time()
     train_mil(
@@ -185,13 +226,12 @@ def train_mil(args,train, val ):
             train_dataset = train,
             val_dataset = val,
             outcomes = args.label_column, #'label',
-            bags = args.outdir_bags, #'panda_project/bags/',
-            outdir = args.outdir_model #'panda_project/model_clam_sb/'
+            bags = bags_dir, #'panda_project/bags/',
+            outdir = outdir #'panda_project/model_clam_sb/'
         )
     end_train = time.time()
     time_training = end_train - start_train
     print('time_training:', time_training)
-
 
 
 def main(args):
@@ -206,12 +246,15 @@ def main(args):
         # Load extracted tile-datset
         dataset = P.dataset(tile_px=args.tile_px, tile_um=args.tile_um)
     else:
-        dataset = extract_tiles(P, args)
+        dataset = extract_tile_dataset(P, args)
+    
+    if not args.load_features:
+        extract_features(args, dataset)
 
-    extract_features(args, dataset)
+    if args.train_mil:
+        train, val = create_splits(dataset, args)
+        train_mil_features(args,train, val )
 
-    train, val = create_splits(dataset, args)
-    train_mil(args,train, val )
     return 
 
 

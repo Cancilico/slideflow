@@ -217,8 +217,6 @@ class WSI:
         # Collect basic slide information
         # if ignore_missing_mpp:
         if not self.slide.has_mpp:
-            # mpp = get_mpp()
-            mpp = 0.25
             raise errors.SlideMissingMPPError(
                 f"Slide {self.path} missing MPP ({OPS_MPP_X})"
             )
