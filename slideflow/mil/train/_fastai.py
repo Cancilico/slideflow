@@ -16,7 +16,7 @@ from .._params import TrainerConfig
 
 # -----------------------------------------------------------------------------
 
-def train(learner, config, callbacks=None):
+def train(learner, config, mlflow, callbacks=None):
     """Train an attention-based multi-instance learning model with FastAI.
 
     Args:
@@ -28,7 +28,7 @@ def train(learner, config, callbacks=None):
     """
     cbs = [
         SaveModelCallback(fname=f"best_valid", monitor=config.save_monitor),
-        CSVLogger(),
+        CSVLogger(mlflow),
     ]
     if callbacks:
         cbs += callbacks

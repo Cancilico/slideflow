@@ -315,6 +315,7 @@ class TrainerConfig:
         bags: Union[str, List[str]],
         *,
         outdir: str = 'mil',
+        mlflow=None,
         exp_label: Optional[str] = None,
         **kwargs
     ) -> "Learner":
@@ -376,6 +377,7 @@ class TrainerConfig:
             outcomes,
             bags,
             outdir=outdir,
+            mlflow=mlflow,
             **kwargs
         )
 
@@ -577,7 +579,7 @@ class TrainerConfig:
         """
         return self.model_config.inspect_batch(batch)
 
-    def run_metrics(self, df, level='slide', outdir=None):
+    def run_metrics(self, df, level='slide', outdir=None,mlflow_run=None):
         """Run metrics and save plots to disk.
 
         Args:
@@ -586,7 +588,7 @@ class TrainerConfig:
             outdir (str): Output directory for saving metrics.
 
         """
-        self.model_config.run_metrics(df, level=level, outdir=outdir)
+        return self.model_config.run_metrics(df, level=level, outdir=outdir,mlflow_run=mlflow_run)
 
 
 # -----------------------------------------------------------------------------
@@ -886,7 +888,7 @@ class MILModelConfig:
             uq=uq,
         )
 
-    def run_metrics(self, df, level='slide', outdir=None) -> None:
+    def run_metrics(self, df, level='slide', outdir=None,mlflow_run=None) -> None:
         """Run metrics and save plots to disk.
 
         Args:
@@ -896,7 +898,7 @@ class MILModelConfig:
 
         """
         if self.is_classification():
-            sf.stats.metrics.classification_metrics(df, level=level, data_dir=outdir)
+            sf.stats.metrics.classification_metrics(df, level=level, data_dir=outdir,mlflow_run=mlflow_run)
         else:
             sf.stats.metrics.regression_metrics(df, level=level, data_dir=outdir)
 

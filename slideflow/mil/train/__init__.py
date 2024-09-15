@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from fastai.learner import Learner
 
 
+import mlflow
 # -----------------------------------------------------------------------------
 
 def train_mil(
@@ -28,6 +29,7 @@ def train_mil(
     bags: Union[str, List[str]],
     *,
     outdir: str = 'mil',
+    mlflow=None,
     exp_label: Optional[str] = None,
     **kwargs
 ) -> "Learner":
@@ -76,6 +78,7 @@ def train_mil(
         outcomes=outcomes,
         bags=bags,
         outdir=outdir,
+        mlflow=mlflow,
         exp_label=exp_label,
         **kwargs
     )
@@ -333,6 +336,7 @@ def _train_mil(
     bags: Union[str, List[str]],
     *,
     outdir: str = 'mil',
+    mlflow=None,
     attention_heatmaps: bool = False,
     uq: bool = False,
     device: Optional[str] = None,
@@ -403,11 +407,14 @@ def _train_mil(
             unique = encoder.categories_[0].tolist()
         else:
             unique = None
-    _log_mil_params(config, outcomes, unique, bags, n_in, n_out, outdir)
-
+    _log_mil_params(config, outcomes, unique, bags, n_in, n_out,mlflow, outdir)
+    # print(mil_params)
+    # mlflow.start_run(run_name="test1")
+    # Log parameters
+    
     # Train.
-    _fastai.train(learner, config)
-
+    _fastai.train(learner, config, mlflow)
+    
     # Generate validation predictions.
     df, attention = predict_mil(
         learner.model,
@@ -425,8 +432,11 @@ def _train_mil(
 
     # Print classification metrics, including per-category accuracy
     utils.rename_df_cols(df, outcomes, categorical=config.is_classification(), inplace=True)
-    config.run_metrics(df, level='slide', outdir=outdir)
 
+    config.run_metrics(df, level='slide', outdir=outdir,mlflow_run=mlflow)
+    # for key, value in metrics.items():
+    #     mlflow.log_metric(key, value)
+        
     # Export attention to numpy arrays
     if attention and outdir:
         utils._export_attention(
@@ -524,7 +534,7 @@ def _train_multimodal_mil(
 
 # ------------------------------------------------------------------------------
 
-def _log_mil_params(config, outcomes, unique, bags, n_in, n_out, outdir=None):
+def _log_mil_params(config, outcomes, unique, bags, n_in, n_out, mlflow=None,outdir=None):
     """Log MIL parameters to JSON."""
     mil_params = config.json_dump()
     mil_params['outcomes'] = outcomes
@@ -552,4 +562,17 @@ def _log_mil_params(config, outcomes, unique, bags, n_in, n_out, outdir=None):
         mil_params['bags_extractor'] = None
     if outdir:
         sf.util.write_json(mil_params, join(outdir, 'mil_params.json'))
+    
+    if mlflow!=None:
+        for key, value in mil_params["params"].items():
+            mlflow.log_param(key, value)
+        
+        mlflow.log_param("normalizer",mil_params["bags_extractor"]["normalizer"])
+        mlflow.log_param("num_features",mil_params["bags_extractor"]["num_features"])
+        mlflow.log_param("tile_px",mil_params["bags_extractor"]["tile_px"])
+        mlflow.log_param("tile_um",mil_params["bags_extractor"]["tile_um"])
+
+        for key, value in mil_params["bags_extractor"]["extractor"]["kwargs"].items():
+            mlflow.log_param(key, value)
+        
     return mil_params

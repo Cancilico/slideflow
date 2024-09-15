@@ -205,7 +205,8 @@ def classification_metrics(
     label: str = '',
     level: str = 'tile',
     data_dir: Optional[str] = '',
-    neptune_run: Optional["neptune.Run"] = None
+    neptune_run: Optional["neptune.Run"] = None,
+    mlflow_run= None,
 ) -> Dict[str, Dict[str, float]]:
     """Generates categorical metrics (AUC/AP) from a set of predictions.
 
@@ -294,6 +295,8 @@ def classification_metrics(
                     f"{level}-level AUC (cat #{i:>2}): {auroc_str} "
                     f"AP: {ap_str} (opt. threshold: {thresh})"
                 )
+                mlflow_run.log_metric(f"{level}_level_AUC_cat{i:>2}",auroc_str)
+                mlflow_run.log_metric("AP",f"{ap_str} (opt. threshold: {thresh})")
         except ValueError as e:
             # Occurs when predictions contain NaN
             log.error(f'Error encountered when generating AUC: {e}')
@@ -312,6 +315,7 @@ def classification_metrics(
                 category_accuracy = correct / n_in_cat
                 perc = category_accuracy * 100
                 log.info(f"Category {i} acc: {perc:.1f}% ({correct}/{n_in_cat})")
+                mlflow_run.log_metric(f"Category {i} acc",f"{perc:.1f}% ({correct}/{n_in_cat})")
             except IndexError:
                 log.warning(f"Error with category accuracy for cat # {i}")
     return {

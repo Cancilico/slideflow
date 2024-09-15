@@ -21,6 +21,7 @@ python3 end2end_mil_train.py
 --splits_config /mnt/d/github/slideflow/notebooks/split_config.json 
 --outdir_model panda_project/  
 --label_column label
+--experiment_name 
 
 ------------------------------------------------------------------------------------------
 IDH1 dataset:
@@ -52,6 +53,9 @@ import argparse
 import slideflow as sf
 from slideflow.mil import mil_config
 from slideflow.mil import train_mil
+
+import mlflow
+mlflow.set_tracking_uri("file:////mnt/d/github/slideflow/mlruns_test")
 
 
 parser = argparse.ArgumentParser(description='Configurations for WSI Training')
@@ -92,7 +96,7 @@ parser.add_argument('--label_column', default = "label", type = str,
 parser.add_argument('--val_fraction', default = None, type = float,
                     help='Fraction of validation split') 
 parser.add_argument('--model', type=str, default='attention_mil', 
-                    help='Select MIL model: attention_mil, transmil, bistro.transformer, clam_sb, clam_mb')  
+                    help='Select MIL model: attention_mil, transmil,, clam_sb, clam_mb, mil_fc_mc')
 parser.add_argument('--lr', default = 1e-4, type = int,
                     help='learning rate (default: 0.0001)')
 parser.add_argument('--batch_size', default = 32, type = int,
@@ -100,14 +104,11 @@ parser.add_argument('--batch_size', default = 32, type = int,
 parser.add_argument('--epochs', default = 50, type = int,
                     help='number of epochs to train')
 parser.add_argument('--outdir_model', type=str, default=None, 
-                    help='Path to save the mil model and predictions')            
-
-
-args = parser.parse_args()
-# tile_um can be int or str, but always comes as string from the command line. Convert digit-string to ints
-if args.tile_um is not None and args.tile_um.isdigit():
-    args.tile_um = int(args.tile_um)
-
+                    help='Path to save the mil model and predictions') 
+parser.add_argument('--experiment_name', type=str, default=None, 
+                    help='Path to save the mil model and predictions') 
+parser.add_argument("--name", default="default", help="name of the training run") 
+         
 
 def create_project(args):
 
@@ -221,13 +222,15 @@ def train_mil_features(args,train, val ):
 
     # Part 06: Train MIL model
     start_train = time.time()
+    mlflow.start_run(run_name=args.name)
     train_mil(
             config,
             train_dataset = train,
             val_dataset = val,
             outcomes = args.label_column, #'label',
             bags = bags_dir, #'panda_project/bags/',
-            outdir = outdir #'panda_project/model_clam_sb/'
+            outdir = outdir, #'panda_project/model_clam_sb/',
+            mlflow=mlflow,
         )
     end_train = time.time()
     time_training = end_train - start_train
@@ -261,6 +264,15 @@ def main(args):
 
 if __name__ == "__main__":
     start_time = time.time()
+
+    args = parser.parse_args()
+    # tile_um can be int or str, but always comes as string from the command line. Convert digit-string to ints
+    if args.tile_um is not None and args.tile_um.isdigit():
+        args.tile_um = int(args.tile_um)
+
+    if args.experiment_name:
+        mlflow.set_experiment(args.experiment_name)        
+
     results = main(args)
     print("finished run!")
 

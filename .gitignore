@@ -31,5 +31,7 @@ docs*/
 .rst
 **.npz
 **.tfrecords
+**.pt
 panda_project/*
 datasets/panda/
+mlruns**/
