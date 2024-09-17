@@ -1,18 +1,64 @@
 import torch
+import os
 import pandas as pd
+from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 from typing import List, Optional, Union, Tuple
 from sklearn.preprocessing import OneHotEncoder
 from sklearn import __version__ as sklearn_version
 from packaging import version
+from fastai.callback.core import Callback
 from fastai.vision.all import (
-    DataLoaders, Learner, SaveModelCallback, CSVLogger
+    DataLoaders, Learner, SaveModelCallback
+    # , CSVLogger
 )
 
 from slideflow import log
 from slideflow.model import torch_utils
 from .._params import TrainerConfig
+
+
+class CSVLogger(Callback):
+    "Log the results displayed in `learn.path/fname`"
+    order=60
+    name = "csv_logger"
+    def __init__(self, mlflow, fname='history.csv', append=False):
+        self.mlflow = mlflow
+        self.fname,self.append = Path(fname),append
+
+    def read_log(self):
+        "Convenience method to quickly access the log."
+        return pd.read_csv(self.path/self.fname)
+
+    def before_fit(self):
+        "Prepare file with metric names."
+        if hasattr(self, "gather_preds"): return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.file = (self.path/self.fname).open('a' if self.append else 'w')
+        self.file.write(','.join(self.recorder.metric_names) + '\n')
+        self.old_logger,self.learn.logger = self.logger,self._write_line
+
+    def _write_line(self, log):
+        "Write a line with `log` and call the old logger."
+        self.file.write(','.join([str(t) for t in log]) + '\n')
+        metrics_values=["epoch","train_loss","valid_loss","roc_auc_score","time"]
+        i=0
+        for t in log:
+            if i==0:
+                epoch=t
+            if i>0:
+                self.mlflow.log_metric(metrics_values[i],t,step=epoch)
+            i+=1
+        self.file.flush()
+        os.fsync(self.file.fileno())
+        self.old_logger(log)
+
+    def after_fit(self):
+        "Close the file and clean up."
+        if hasattr(self, "gather_preds"): return
+        self.file.close()
+        self.learn.logger = self.old_logger
 
 # -----------------------------------------------------------------------------
 
