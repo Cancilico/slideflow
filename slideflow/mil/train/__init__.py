@@ -408,13 +408,9 @@ def _train_mil(
         else:
             unique = None
     _log_mil_params(config, outcomes, unique, bags, n_in, n_out,mlflow, outdir)
-    # print(mil_params)
-    # mlflow.start_run(run_name="test1")
-    # Log parameters
     
     # Train.
     _fastai.train(learner, config, mlflow)
-    
     # Generate validation predictions.
     df, attention = predict_mil(
         learner.model,
@@ -434,9 +430,6 @@ def _train_mil(
     utils.rename_df_cols(df, outcomes, categorical=config.is_classification(), inplace=True)
 
     config.run_metrics(df, level='slide', outdir=outdir,mlflow_run=mlflow)
-    # for key, value in metrics.items():
-    #     mlflow.log_metric(key, value)
-        
     # Export attention to numpy arrays
     if attention and outdir:
         utils._export_attention(
