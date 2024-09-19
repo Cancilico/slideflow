@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from pandas.core.frame import DataFrame
 from sklearn import metrics
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 from os.path import join
 from types import SimpleNamespace
 from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union,
@@ -318,9 +319,39 @@ def classification_metrics(
                 mlflow_run.log_metric(f"Category {i} acc",f"{perc:.1f}% ({correct}/{n_in_cat})")
             except IndexError:
                 log.warning(f"Error with category accuracy for cat # {i}")
+
+    true_labels = df['label-y_true']
+    # Assuming predictions are probabilities and we select the class with the highest probability
+    predicted_labels = df.filter(like='y_pred').idxmax(axis=1).str.extract('(\d+)').astype(int)
+
+    # Calculate accuracy and F1 score
+    overall_accuracy = accuracy_score(true_labels, predicted_labels)
+    log.info(f"Overall accuracy: {overall_accuracy:.3f}")
+    
+    if num_cat<=2:
+        overall_f1 = f1_score(true_labels, predicted_labels, average='binary')
+    else:
+        overall_f1 = f1_score(true_labels, predicted_labels, average='macro')
+    log.info(f"Overall F1 Score (Macro): {overall_f1:.3f}")
+        
+    if mlflow_run:
+        mlflow_run.log_metric(f"{level}_level_overall_accuracy", overall_accuracy)
+        mlflow_run.log_metric(f"{level}_level_overall_f1_macro", overall_f1)    
+
+    # Generate classification report
+    report = classification_report(true_labels, predicted_labels, output_dict=True)
+    class_report_df = pd.DataFrame(report).transpose()
+    if data_dir:
+        class_report_df.to_csv(f"{data_dir}/{label_start}{level}_classification_report.csv")
+    log.info("Classification report saved as DataFrame.")    
+    log.info("\nClassification Report:\n")
+    log.info(class_report_df)    
+
     return {
         'auc': all_auc,
         'ap': all_ap,
+        'accuracy': overall_accuracy,
+        'f1_score': overall_f1,        
     }
 
 

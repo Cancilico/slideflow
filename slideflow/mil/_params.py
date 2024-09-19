@@ -898,7 +898,7 @@ class MILModelConfig:
 
         """
         if self.is_classification():
-            sf.stats.metrics.classification_metrics(df, level=level, data_dir=outdir,mlflow_run=mlflow_run)
+            return sf.stats.metrics.classification_metrics(df, level=level, data_dir=outdir,mlflow_run=mlflow_run)
         else:
             sf.stats.metrics.regression_metrics(df, level=level, data_dir=outdir)
 

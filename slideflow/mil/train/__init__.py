@@ -429,7 +429,7 @@ def _train_mil(
     # Print classification metrics, including per-category accuracy
     utils.rename_df_cols(df, outcomes, categorical=config.is_classification(), inplace=True)
 
-    config.run_metrics(df, level='slide', outdir=outdir,mlflow_run=mlflow)
+    metric_dict = config.run_metrics(df, level='slide', outdir=outdir,mlflow_run=mlflow)
     # Export attention to numpy arrays
     if attention and outdir:
         utils._export_attention(
@@ -448,7 +448,7 @@ def _train_mil(
             **heatmap_kwargs
         )
 
-    return learner
+    return learner, metric_dict
 
 
 def _train_multimodal_mil(

@@ -82,7 +82,7 @@ parser.add_argument('--tile-px', default = 2560, type=int,
 parser.add_argument('--tile-um', default = "174", type = str,
                     help='Size of tiles to extract, in microns')
 parser.add_argument("-qc", "--quality-control", default='both',
-                    help='Apply quality control to tiles, removing blurry or background tiles.  Options: otsu, blur,')
+                    help='Apply quality control to tiles, removing blurry or background tiles.  Options: otsu, blur, both')
 parser.add_argument('--extractor_model', default = "ctranspath", type = str,
                     help='Select a feature extractor model')
 parser.add_argument('--outdir_bags', type=str, default=None, 
