@@ -27,7 +27,11 @@ def main():
     P = sf.load_project(project_path)  
     dataset = P.dataset(tile_px=244, tile_um=112)
 
-    bag_names = ['bags_ctranspath','bags_histossl','bags_plip','bags_retccl','bags_resnet50_imagenet']
+    bag_names = ['bags_ctranspath','bags_histossl','bags_plip',
+                'bags_retccl','bags_resnet50_imagenet',
+                'bags_alexnet_imagenet', 'bags_inception_imagenet', 
+                'bags_resnet18_imagenet', 'bags_resnext50_32x4d_imagenet', 
+                'bags_wide_resnet50_2_imagenet']
     mil_models =  ['attention_mil','clam_sb', 'clam_mb', 'mil_fc_mc', 'transmil']
 
     for bag in bag_names:
@@ -64,7 +68,7 @@ def main():
                     model= mil_model_file,
                     outcomes='label',
                     dataset=dataset,        
-                    bags=f'panda_project/{bag}/',
+                    bags=f'panda_project/feature_bags/{bag}/',
                 )
                 df_test_pred.to_csv(f'{save_path}/test_prediction.csv')
 
