@@ -167,12 +167,12 @@ class TrainerConfig:
             correlation coefficient for regression models.
 
         """
-        from fastai.vision.all import RocAuc, mse, PearsonCorrCoef
+        from fastai.vision.all import RocAuc, mse, PearsonCorrCoef, F1ScoreMulti, accuracy, accuracy_multi, F1Score,BalancedAccuracy
 
         model_metrics = self.model_config.get_metrics()
 
         if self.is_classification():
-            fallback = [RocAuc()]
+            fallback = [RocAuc(), F1ScoreMulti(), accuracy_multi]
         else:
             fallback = [mse, PearsonCorrCoef()]
         return model_metrics or fallback
