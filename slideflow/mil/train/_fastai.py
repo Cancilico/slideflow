@@ -42,14 +42,15 @@ class CSVLogger(Callback):
     def _write_line(self, log):
         "Write a line with `log` and call the old logger."
         self.file.write(','.join([str(t) for t in log]) + '\n')
-        metrics_values=["epoch","train_loss","valid_loss","roc_auc_score","time"]
+        metrics_values=["epoch","train_loss","valid_loss","roc_auc_score", "f1_score", "accuracy", "time"] 
         i=0
         for t in log:
-            if i==0:
-                epoch=t
-            if i>0:
-                self.mlflow.log_metric(metrics_values[i],t,step=epoch)
-            i+=1
+            if  not isinstance(t, str):
+                if i==0:
+                    epoch=t
+                if i>0:
+                    self.mlflow.log_metric(metrics_values[i],t,step=epoch)
+                i+=1
         self.file.flush()
         os.fsync(self.file.fileno())
         self.old_logger(log)
