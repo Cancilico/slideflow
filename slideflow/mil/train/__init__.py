@@ -561,8 +561,7 @@ def _log_mil_params(config, outcomes, unique, bags, n_in, n_out, mlflow=None,out
             mlflow.log_param(key, value)
         
         mlflow.log_param("normalizer",mil_params["bags_extractor"]["normalizer"])
-        mlflow.log_param("num_features",mil_params["bags_extractor"]["num_features"])
-        mlflow.log_param("tile_px",mil_params["bags_extractor"]["tile_px"])
+        mlflow.log_param("num_features",mil_params["bags_extractor"]["num_features"])    
         mlflow.log_param("tile_um",mil_params["bags_extractor"]["tile_um"])
 
         for key, value in mil_params["bags_extractor"]["extractor"]["kwargs"].items():

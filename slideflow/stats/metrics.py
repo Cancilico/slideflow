@@ -296,8 +296,6 @@ def classification_metrics(
                     f"{level}-level AUC (cat #{i:>2}): {auroc_str} "
                     f"AP: {ap_str} (opt. threshold: {thresh})"
                 )
-                mlflow_run.log_metric(f"{level}_level_AUC_cat{i:>2}",auroc_str)
-                mlflow_run.log_metric("AP",f"{ap_str} (opt. threshold: {thresh})")
         except ValueError as e:
             # Occurs when predictions contain NaN
             log.error(f'Error encountered when generating AUC: {e}')
@@ -315,8 +313,7 @@ def classification_metrics(
                 correct = y_pred_onehot(outcome_df.loc[yt_in_cat == 1], i).sum()
                 category_accuracy = correct / n_in_cat
                 perc = category_accuracy * 100
-                log.info(f"Category {i} acc: {perc:.1f}% ({correct}/{n_in_cat})")
-                mlflow_run.log_metric(f"Category {i} acc",f"{perc:.1f}% ({correct}/{n_in_cat})")
+                log.info(f"Category {i} acc: {perc:.1f}% ({correct}/{n_in_cat})")            
             except IndexError:
                 log.warning(f"Error with category accuracy for cat # {i}")
 
@@ -332,12 +329,7 @@ def classification_metrics(
         overall_f1 = f1_score(true_labels, predicted_labels, average='binary')
     else:
         overall_f1 = f1_score(true_labels, predicted_labels, average='macro')
-    log.info(f"Overall F1 Score (Macro): {overall_f1:.3f}")
-        
-    if mlflow_run:
-        mlflow_run.log_metric(f"{level}_level_overall_accuracy", overall_accuracy)
-        mlflow_run.log_metric(f"{level}_level_overall_f1_macro", overall_f1)    
-
+    log.info(f"Overall F1 Score (Macro): {overall_f1:.3f}")        
     # Generate classification report
     report = classification_report(true_labels, predicted_labels, output_dict=True)
     class_report_df = pd.DataFrame(report).transpose()
