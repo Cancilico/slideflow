@@ -101,6 +101,8 @@ parser.add_argument('--lr', default = 1e-4, type = int,
                     help='learning rate (default: 0.0001)')
 parser.add_argument('--batch_size', default = 32, type = int,
                     help='Set batch size for training mil model')
+parser.add_argument('--bag_size', default = 512, type = int,
+                        help=' Bag size. Defaults to 512.')
 parser.add_argument('--epochs', default = 50, type = int,
                     help='number of epochs to train')
 parser.add_argument('--outdir_model', type=str, default=None, 
@@ -205,6 +207,7 @@ def train_mil_features(args,train, val ):
         'model': args.model,
         'lr': args.lr,
         'batch_size': args.batch_size,
+        'bag_size': args.bag_size,
         'epochs': args.epochs,
         'fit_one_cycle': True,
     }
