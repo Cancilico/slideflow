@@ -167,6 +167,10 @@ def get_extractor_config(model_name, args):
     specific_configs = {
         'inception_imagenet': {'resize': 224},  # Different resize for Inception
         'ctranspath': {'resize': 224, 'center_crop': True, 'interpolation': 'bicubic', 'exclude': ['tile_px']},  # Exclude tile_px
+        'histossl': {'exclude': ['tile_px']},
+        'plip': {'exclude': ['tile_px']},
+        'retccl': {'exclude': ['tile_px']},
+        
     }
     # Retrieve specific configuration and handle exclusions if any
     model_config = specific_configs.get(model_name, {})
