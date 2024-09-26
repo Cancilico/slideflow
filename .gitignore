@@ -33,3 +33,4 @@ docs*/
 **.tfrecords
 panda_project/*
 datasets/panda/
+**project/
