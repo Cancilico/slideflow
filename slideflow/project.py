@@ -602,8 +602,8 @@ class Project:
             filter_blank = [filter_blank]
         if filter_blank:
             filter_blank += [o for o in outcomes]
-        else:
-            filter_blank = [o for o in outcomes]
+        # else:
+        #     filter_blank = [o for o in outcomes]
         if input_header is not None and not isinstance(input_header, list):
             input_header = [input_header]
         if input_header is not None:
@@ -625,11 +625,12 @@ class Project:
                         hp.tile_px, hp.tile_um
                     )
                 )
-        dataset = dataset.filter(
-            filters=filters,
-            filter_blank=filter_blank,
-            min_tiles=min_tiles
-        )
+        if filters and filter_blank:
+            dataset = dataset.filter(
+                filters=filters,
+                filter_blank=filter_blank,
+                min_tiles=min_tiles
+            )
         # --- Load labels -------------------------------------------------
         use_float = (hp.model_type() in ['regression', 'survival'])
         labels, unique = dataset.labels(outcomes, use_float=use_float)
