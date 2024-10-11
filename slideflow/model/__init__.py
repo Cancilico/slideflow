@@ -84,6 +84,7 @@ def trainer_from_hp(*args, **kwargs):
 
 
 def build_trainer(
+    mlflow,
     hp: "ModelParams",
     outdir: str,
     labels: Dict[str, Any],
@@ -137,7 +138,7 @@ def build_trainer(
 
     """
     if hp.model_type() == 'classification':
-        return Trainer(hp, outdir, labels, **kwargs)
+        return Trainer(hp, outdir, labels,mlflow, **kwargs)
     if hp.model_type() == 'regression':
         return RegressionTrainer(hp, outdir, labels, **kwargs)
     if hp.model_type() == 'survival':

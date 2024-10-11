@@ -563,6 +563,7 @@ class Project:
         training_kwargs: Dict,
         balance_headers: Optional[Union[str, List[str]]],
         process_isolate: bool = False,
+        mlflow = None,
         **kwargs
     ) -> None:
         """Train a model(s) using the specified hyperparameters.
@@ -717,7 +718,7 @@ class Project:
         # --- Train on a specific K-fold --------------------------------------
         for k in valid_k:
             s_args.k = k
-            self._train_split(dataset, hp, val_settings, s_args)
+            self._train_split(dataset, hp, val_settings, s_args, mlflow)
 
         # --- Record results --------------------------------------------------
         if (not val_settings.source
@@ -742,6 +743,7 @@ class Project:
         hp: ModelParams,
         val_settings: SimpleNamespace,
         s_args: SimpleNamespace,
+        mlflow,
     ) -> None:
         """Train a model for a given training/validation split.
 
@@ -982,7 +984,8 @@ class Project:
                                                model_kwargs,
                                                s_args.training_kwargs,
                                                s_args.results_dict,
-                                               self.verbosity))
+                                               self.verbosity,
+                                               mlflow))
             process.start()
             log.debug(f'Spawning training process (PID: {process.pid})')
             process.join()
@@ -992,7 +995,8 @@ class Project:
                 model_kwargs,
                 s_args.training_kwargs,
                 s_args.results_dict,
-                self.verbosity
+                self.verbosity,
+                mlflow
             )
 
     def add_source(
@@ -3182,6 +3186,7 @@ class Project:
         load_method: str = 'weights',
         balance_headers: Optional[Union[str, List[str]]] = None,
         process_isolate: bool = False,
+        mlflow = None,
         **training_kwargs: Any
     ) -> Dict:
         """Train model(s).
@@ -3401,7 +3406,8 @@ class Project:
                 training_kwargs=training_kwargs,
                 results_dict=results_dict,
                 load_method=load_method,
-                process_isolate=process_isolate
+                process_isolate=process_isolate,
+                mlflow=mlflow,
             )
         # Print summary of all models
         log.info('Training complete; validation accuracies:')

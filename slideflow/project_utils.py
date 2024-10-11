@@ -163,12 +163,13 @@ def _train_worker(
     model_kw: Dict,
     training_kw: Dict,
     results_dict: Dict,
-    verbosity: int
+    verbosity: int,
+    mlflow,
 ) -> None:
     """Internal function to execute model training in an isolated process."""
     sf.setLoggingLevel(verbosity)
     train_dts, val_dts = datasets
-    trainer = sf.model.build_trainer(**model_kw)
+    trainer = sf.model.build_trainer(mlflow, **model_kw)
     results = trainer.train(train_dts, val_dts, **training_kw)
     results_dict.update({model_kw['name']: results})
 

@@ -17,6 +17,8 @@ from rich.progress import Progress, TimeElapsedColumn
 from collections import defaultdict
 from os.path import join
 from pandas.api.types import is_float_dtype, is_integer_dtype
+from sklearn.metrics import f1_score, roc_auc_score
+from sklearn.preprocessing import label_binarize
 from typing import (TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple,
                     Union, Callable)
 
@@ -417,6 +419,7 @@ class Trainer:
         hp: ModelParams,
         outdir: str,
         labels: Dict[str, Any],
+        mlflow,
         *,
         slide_input: Optional[Dict[str, Any]] = None,
         name: str = 'Trainer',
@@ -435,7 +438,7 @@ class Trainer:
         transform: Optional[Union[Callable, Dict[str, Callable]]] = None,
         pin_memory: bool = True,
         num_workers: int = 4,
-        chunk_size: int = 8
+        chunk_size: int = 8,
     ):
         """Sets base configuration, preparing model inputs and outputs.
 
@@ -493,6 +496,7 @@ class Trainer:
         self.hp = hp
         self.outdir = outdir
         self.labels = labels
+        self.mlflow =mlflow
         self.patients = dict()  # type: Dict[str, str]
         self.name = name
         self.model = None  # type: Optional[torch.nn.Module]
@@ -563,7 +567,16 @@ class Trainer:
                 config['outcome_labels'] = {str(k): v for k,v in cat_assign.items()}
 
         sf.util.write_json(config, join(self.outdir, 'params.json'))
+        
+        #mlflow logging
+        if mlflow!=None:
+            for key, value in config.items():
+                if key!="hp":
+                    mlflow.log_param(key, value)
 
+            for key, value in config["hp"].items():
+                mlflow.log_param(key, value)
+                
         # Neptune logging
         self.config = config
         self.img_format = config['img_format'] if 'img_format' in config else None
@@ -697,6 +710,8 @@ class Trainer:
         self.ema_two_checks_prior = -1  # type: float
         self.epoch_records = 0  # type: int
         self.running_loss = 0.0
+        self.running_f1 =0.0,
+        self.running_aucroc =0.0,
         self.running_corrects = {}  # type: Union[Tensor, Dict[str, Tensor]]
 
     def _accuracy_as_numpy(
@@ -748,6 +763,63 @@ class Trainer:
             assert not isinstance(running_corrects, dict)
             _acc = running_corrects / num_records
             return _acc, f'acc: {_acc:.4f}'
+    
+    def _calculate_f1_score(
+            self, 
+            outputs: Union[Tensor, List[Tensor]],
+            labels: Union[Tensor, Dict[Any, Tensor]]
+            ):
+        '''Calculates the F1 score in a manner compatible with multiple outcomes.'''
+        if self.num_outcomes > 1:
+            if not isinstance(labels, dict):
+                raise ValueError("Expected labels to be a dict: num_outcomes is > 1")
+            f1_scores = []
+            for o, out in enumerate(outputs):
+                # Assuming the output is logits, use argmax to predict classes
+                predicted_labels = np.argmax(out.detach().cpu().numpy(), axis=1)
+                true_labels = labels[f'out-{o}'].detach().cpu().numpy()
+                f1 = f1_score(true_labels, predicted_labels, average='weighted')
+                f1_scores.append(f1)
+            # Calculate average F1 score across all outcomes
+            average_f1 = np.mean(f1_scores)
+            # return average_f1
+            return f1_scores
+        else:
+            # Convert outputs to predicted labels if binary or single class
+            if outputs.shape[1] == 1:  # Binary classification case
+                predicted_labels = (outputs.detach().cpu().numpy() > 0.5).astype(int)
+            else:  # Multi-class case
+                predicted_labels = np.argmax(outputs.detach().cpu().numpy(), axis=1)
+            true_labels = labels.detach().cpu().numpy()
+            return f1_score(true_labels, predicted_labels, average='weighted')
+        
+        
+    def _calculate_auc_roc(self, outputs, labels):
+        '''Calculates the AUC-ROC score in a manner compatible with both binary and multi-class outcomes.'''
+        if self.num_outcomes > 1:
+            # Multi-class scenario
+            # Assuming outputs are logits or probabilities and labels are already one-hot encoded or need to be binarized
+            if not isinstance(labels, np.ndarray):
+                labels = labels.detach().cpu().numpy()
+            if not isinstance(outputs, np.ndarray):
+                outputs = torch.softmax(outputs, dim=1).detach().cpu().numpy()                
+            # For multi-class ROC AUC, labels need to be binarized
+            if len(labels.shape) == 1:
+                labels = label_binarize(labels, classes=np.unique(labels))
+            roc_auc = roc_auc_score(labels, outputs, multi_class='ovr')
+            
+        else:
+            # Binary classification scenario
+            true_labels = labels.detach().cpu().numpy()
+            if outputs.shape[1] == 1:
+                # Assuming outputs are logits or probabilities of positive class
+                predicted_scores = torch.sigmoid(outputs).detach().cpu().numpy()[:, 0]
+            else:
+                # Outputs are probabilities (after softmax)
+                predicted_scores = outputs.detach().cpu().numpy()[:, 1]
+            roc_auc = roc_auc_score(true_labels, predicted_scores)
+        return roc_auc  
+          
 
     def _calculate_loss(
         self,
@@ -949,6 +1021,9 @@ class Trainer:
             {f'epoch{self.epoch}': epoch_metrics}
         )
         self._log_eval_to_neptune(loss, acc, metrics, epoch_metrics)
+        
+        self.mlflow.log_metric("val_loss",loss)
+        self.mlflow.log_metric("val_acc",acc)
         return epoch_metrics
 
     def _fit_normalizer(self, norm_fit: Optional[NormFit]) -> None:
@@ -1415,6 +1490,8 @@ class Trainer:
                     inp = (images,)  # type: ignore
                 outputs = self.model(*inp)
                 loss = self._calculate_loss(outputs, labels, self.loss_fn)
+                f1 = self._calculate_f1_score(outputs, labels)   
+                auc_roc = self._calculate_auc_roc(outputs, labels)
 
             # Update weights
             if self.mixed_precision and self.device.type == 'cuda':
@@ -1444,9 +1521,21 @@ class Trainer:
             train_acc, acc_desc = 0, ''  # type: ignore
         self.running_loss += loss.item() * images.size(0)
         _loss = self.running_loss / self.epoch_records
+        l=loss.item()
+        # self.running_f1 += f1.item() * images.size(0)
+        _f1=torch.tensor(f1).to(dtype=torch.float32).item()
+        self.running_f1 += _f1* images.size(0)
+        _f1_score = self.running_f1 / self.epoch_records
+        
+        # self.running_aucroc += auc_roc.item() * images.size(0)
+        self.running_aucroc += torch.tensor(auc_roc).to(dtype=torch.float32).item() * images.size(0)
+        _auc_roc = self.running_aucroc / self.epoch_records
         pb.update(task_id=0,  # type: ignore
-                  description=(f'[bold blue]train[/] '
-                               f'loss: {_loss:.4f} {acc_desc}'))
+                    description=(f'[bold blue]train[/] '
+                                f'loss: {_loss:.4f}, '
+                                f'{acc_desc}, '
+                                f'F1: {_f1_score:.4f}, '
+                                f'AUC-ROC: {_auc_roc:.4f}'))
         pb.advance(task_id=0)  # type: ignore
 
         # Log to tensorboard
@@ -2028,11 +2117,16 @@ class Trainer:
             self._log_to_neptune(loss, acc, 'train', 'epoch')
             if save_model and (self.epoch in self.hp.epochs or self.early_stop):
                 self._save_model()
-
+            
+            #logging mlflow train_metrics
+            self.mlflow.log_metric("epoch",self.epoch)
+            self.mlflow.log_metric("train_loss",loss)
+            self.mlflow.log_metric("train_acc",acc_desc)
             # Full evaluation -------------------------------------------------
             # Perform full evaluation if the epoch is one of the
             # predetermined epochs at which to save/eval a model
-            if 'val' in self.dataloaders and self.epoch in self.hp.epochs:
+            #if 'val' in self.dataloaders and self.epoch in self.hp.epochs:
+            if 'val' in self.dataloaders:
                 epoch_res = self._val_metrics(
                     save_predictions=save_predictions,
                     reduce_method=reduce_method,
