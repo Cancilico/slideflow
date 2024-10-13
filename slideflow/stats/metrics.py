@@ -559,7 +559,7 @@ def eval_dataset(
         )
     else:
         from slideflow.model import torch_utils
-        df, acc, total_loss = torch_utils.eval_from_model(
+        df, acc, total_loss, f1, auc_roc = torch_utils.eval_from_model(
             model,
             dataset,
             model_type,
@@ -571,7 +571,7 @@ def eval_dataset(
     if outcome_names or model_type == 'survival':
         df = name_columns(df, model_type, outcome_names)
     dfs = group_reduce(df, method=reduce_method, patients=patients)
-    return dfs, acc, total_loss
+    return dfs, acc, total_loss, f1, auc_roc
 
 
 def group_reduce(
@@ -789,7 +789,7 @@ def metrics_from_dataset(
         metrics [dict], accuracy [float], loss [float]
     """
     _assert_model_type(model_type)
-    dfs, acc, total_loss = eval_dataset(
+    dfs, acc, total_loss, f1, auc_roc = eval_dataset(
         model,
         dataset,
         model_type,
@@ -830,7 +830,7 @@ def metrics_from_dataset(
         metrics = metrics_by_level(survival_metrics)
 
     log.debug(f'Metrics generation complete.')
-    return metrics, acc, total_loss
+    return metrics, acc, total_loss, f1, auc_roc
 
 
 def name_columns(

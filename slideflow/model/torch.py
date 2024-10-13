@@ -765,25 +765,26 @@ class Trainer:
             return _acc, f'acc: {_acc:.4f}'
     
     def _calculate_f1_score(
-            self, 
-            outputs: Union[Tensor, List[Tensor]],
-            labels: Union[Tensor, Dict[Any, Tensor]]
-            ):
-        '''Calculates the F1 score in a manner compatible with multiple outcomes.'''
+        self,
+        outputs: Union[Tensor, List[Tensor]],
+        labels: Union[Tensor, Dict[Any, Tensor]]
+    ) -> Tuple[Union[Tensor, List[Tensor]], str]:
+        '''Calculates the F1 score in a manner compatible with multiple outcomes,
+        and returns a list of F1 scores for each outcome along with a descriptive string.'''
         if self.num_outcomes > 1:
             if not isinstance(labels, dict):
                 raise ValueError("Expected labels to be a dict: num_outcomes is > 1")
             f1_scores = []
+            f1_desc = ''
             for o, out in enumerate(outputs):
                 # Assuming the output is logits, use argmax to predict classes
                 predicted_labels = np.argmax(out.detach().cpu().numpy(), axis=1)
                 true_labels = labels[f'out-{o}'].detach().cpu().numpy()
                 f1 = f1_score(true_labels, predicted_labels, average='weighted')
                 f1_scores.append(f1)
+                f1_desc += f"out-{o} F1: {f1:.4f} "
             # Calculate average F1 score across all outcomes
-            average_f1 = np.mean(f1_scores)
-            # return average_f1
-            return f1_scores
+            return f1_scores, f1_desc
         else:
             # Convert outputs to predicted labels if binary or single class
             if outputs.shape[1] == 1:  # Binary classification case
@@ -791,11 +792,17 @@ class Trainer:
             else:  # Multi-class case
                 predicted_labels = np.argmax(outputs.detach().cpu().numpy(), axis=1)
             true_labels = labels.detach().cpu().numpy()
-            return f1_score(true_labels, predicted_labels, average='weighted')
+            f1 = f1_score(true_labels, predicted_labels, average='weighted')
+            return f1, f'acc: {f1:.4f}'
         
         
-    def _calculate_auc_roc(self, outputs, labels):
-        '''Calculates the AUC-ROC score in a manner compatible with both binary and multi-class outcomes.'''
+    def _calculate_auc_roc(
+        self,
+        outputs: Union[Tensor, List[Tensor]],
+        labels: Union[Tensor, Dict[Any, Tensor]]
+    ) -> Tuple[float, str]:
+        '''Calculates the AUC-ROC score in a manner compatible with both binary and multi-class outcomes,
+        and returns the score along with a descriptive string.'''
         if self.num_outcomes > 1:
             # Multi-class scenario
             # Assuming outputs are logits or probabilities and labels are already one-hot encoded or need to be binarized
@@ -803,22 +810,24 @@ class Trainer:
                 labels = labels.detach().cpu().numpy()
             if not isinstance(outputs, np.ndarray):
                 outputs = torch.softmax(outputs, dim=1).detach().cpu().numpy()                
-            # For multi-class ROC AUC, labels need to be binarized
+            # For multi-class ROC AUC, labels need to be binarized if they are not already in that format
             if len(labels.shape) == 1:
                 labels = label_binarize(labels, classes=np.unique(labels))
             roc_auc = roc_auc_score(labels, outputs, multi_class='ovr')
-            
+            roc_desc = f'Multi-class AUC-ROC: {roc_auc:.4f}'
         else:
             # Binary classification scenario
             true_labels = labels.detach().cpu().numpy()
             if outputs.shape[1] == 1:
-                # Assuming outputs are logits or probabilities of positive class
+                # Assuming outputs are logits or probabilities of the positive class
                 predicted_scores = torch.sigmoid(outputs).detach().cpu().numpy()[:, 0]
             else:
                 # Outputs are probabilities (after softmax)
                 predicted_scores = outputs.detach().cpu().numpy()[:, 1]
             roc_auc = roc_auc_score(true_labels, predicted_scores)
-        return roc_auc  
+            roc_desc = f'Binary AUC-ROC: {roc_auc:.4f}'
+
+        return roc_auc, roc_desc
           
 
     def _calculate_loss(
@@ -985,7 +994,7 @@ class Trainer:
             normalizer=(self.normalizer if self._has_gpu_normalizer() else None),
         )
         # Calculate patient/slide/tile metrics (AUC, R-squared, C-index, etc)
-        metrics, acc, loss = sf.stats.metrics_from_dataset(
+        metrics, acc, loss, f1, auc_roc = sf.stats.metrics_from_dataset(
             self.inference_model,
             model_type=self.hp.model_type(),
             patients=self.patients,
@@ -1024,6 +1033,9 @@ class Trainer:
         
         self.mlflow.log_metric("val_loss",loss)
         self.mlflow.log_metric("val_acc",acc)
+        self.mlflow.log_metric("val_f1",f1)
+        self.mlflow.log_metric("val_auc_roc",auc_roc)
+        
         return epoch_metrics
 
     def _fit_normalizer(self, norm_fit: Optional[NormFit]) -> None:
@@ -1490,8 +1502,6 @@ class Trainer:
                     inp = (images,)  # type: ignore
                 outputs = self.model(*inp)
                 loss = self._calculate_loss(outputs, labels, self.loss_fn)
-                f1 = self._calculate_f1_score(outputs, labels)   
-                auc_roc = self._calculate_auc_roc(outputs, labels)
 
             # Update weights
             if self.mixed_precision and self.device.type == 'cuda':
@@ -1517,25 +1527,20 @@ class Trainer:
             train_acc, acc_desc = self._calculate_accuracy(
                 self.running_corrects, self.epoch_records
             )
+            f1,f1_desc = self._calculate_f1_score(outputs, labels)  
+            self.running_f1 = f1 
+            auc_roc,auc_roc_desc = self._calculate_auc_roc(outputs, labels)
+            self.running_aucroc = auc_roc
         else:
             train_acc, acc_desc = 0, ''  # type: ignore
         self.running_loss += loss.item() * images.size(0)
         _loss = self.running_loss / self.epoch_records
-        l=loss.item()
-        # self.running_f1 += f1.item() * images.size(0)
-        _f1=torch.tensor(f1).to(dtype=torch.float32).item()
-        self.running_f1 += _f1* images.size(0)
-        _f1_score = self.running_f1 / self.epoch_records
-        
-        # self.running_aucroc += auc_roc.item() * images.size(0)
-        self.running_aucroc += torch.tensor(auc_roc).to(dtype=torch.float32).item() * images.size(0)
-        _auc_roc = self.running_aucroc / self.epoch_records
         pb.update(task_id=0,  # type: ignore
                     description=(f'[bold blue]train[/] '
                                 f'loss: {_loss:.4f}, '
                                 f'{acc_desc}, '
-                                f'F1: {_f1_score:.4f}, '
-                                f'AUC-ROC: {_auc_roc:.4f}'))
+                                f'f1: {f1:.4f}, '
+                                f'AUC-ROC: {auc_roc:.4f}'))
         pb.advance(task_id=0)  # type: ignore
 
         # Log to tensorboard
@@ -2115,13 +2120,15 @@ class Trainer:
             results['epochs'][f'epoch{self.epoch}'].update(epoch_metrics)
             self._log_epoch('train', self.epoch, loss, acc_desc)
             self._log_to_neptune(loss, acc, 'train', 'epoch')
-            if save_model and (self.epoch in self.hp.epochs or self.early_stop):
-                self._save_model()
-            
             #logging mlflow train_metrics
             self.mlflow.log_metric("epoch",self.epoch)
             self.mlflow.log_metric("train_loss",loss)
             self.mlflow.log_metric("train_acc",acc_desc)
+            self.mlflow.log_metric("train_f1",self.running_f1)
+            self.mlflow.log_metric("train_auc_roc",self.running_aucroc)
+            if save_model and (self.epoch in self.hp.epochs or self.early_stop):
+                self._save_model()
+            
             # Full evaluation -------------------------------------------------
             # Perform full evaluation if the epoch is one of the
             # predetermined epochs at which to save/eval a model

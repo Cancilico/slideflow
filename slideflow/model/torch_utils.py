@@ -16,6 +16,7 @@ from slideflow.errors import DatasetError
 from slideflow.util import log, ImgBatchSpeedColumn, no_scope
 from rich.progress import Progress, TimeElapsedColumn, SpinnerColumn
 from functools import reduce
+from sklearn.metrics import f1_score,roc_auc_score
 
 # -----------------------------------------------------------------------------
 
@@ -403,6 +404,32 @@ def eval_from_model(
             assert corrects is not None, "Empty dataset to evaluate/predict."
             acc = corrects.cpu().numpy() / total
 
+    # Calculate F1 Score
+    f1_scores = []
+    if not predict_only and y_true is not None:
+        for pred, true in zip(y_pred, y_true):
+            pred_labels = np.argmax(pred, axis=1) if model_type == 'classification' else np.round(pred)
+            f1_scores.append(f1_score(true, pred_labels, average='weighted'))
+        avg_f1_score = np.mean(f1_scores)
+
+    auc_scores = []
+    if not predict_only and y_true is not None:
+        for idx, (pred, true) in enumerate(zip(y_pred, y_true)):
+            if model_type == 'classification':
+                # Convert softmax probabilities to class probabilities for binary or calculate OvR AUC for multi-class
+                if pred.shape[1] == 2:
+                    pred_scores = pred[:, 1]  # Use the probability of the positive class
+                else:
+                    pred_scores = pred  # Use raw probabilities for multi-class OvR AUC
+                auc = roc_auc_score(true, pred_scores, multi_class='ovr' if pred.shape[1] > 2 else 'raise')
+            else:
+                # Use regression predictions as scores (continuous output) - not typical for AUC but included for completeness
+                auc = roc_auc_score(true, pred)
+            auc_scores.append(auc)
+
+        # Average AUC scores across all outcomes if there are multiple
+        avg_auc_score = np.mean(auc_scores) if len(auc_scores) > 1 else auc_scores[0] if auc_scores else None
+
     if locations != []:
         locations = np.concatenate(locations)
     else:
@@ -414,7 +441,7 @@ def eval_from_model(
     df = df_from_pred(y_true, y_pred, y_std, tile_to_slides, locations)
 
     log.debug("Evaluation complete.")
-    return df, acc, loss  # type: ignore
+    return df, acc, loss, avg_f1_score, avg_auc_score   # type: ignore
 
 
 def predict_from_model(
