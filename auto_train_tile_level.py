@@ -46,11 +46,11 @@ def parse_args():
                         help='project directory')
     parser.add_argument('--annotations', type=str, default=None, 
                         help='Path to label csv file')
-    parser.add_argument('--slides_dir', type=str, default=None, 
+    parser.add_argument('--slides_dir', type=str, default='/mnt/d/DATA/idh1_wsi', 
                         help='Path to slides')
-    parser.add_argument('--dataset_config', type=str, default=None, 
+    parser.add_argument('--dataset_config', type=str, default='/mnt/d/projects/slideflow/datasets/idh1/idh1_tumor.json', 
                         help='Path to data config file')
-    parser.add_argument('--project_name', type=str, default=None, 
+    parser.add_argument('--project_name', type=str, default='idh1_project', 
                         help='Set the project name.')
     parser.add_argument('--load_project', default=False, action="store_true", 
                         help='Load project')
@@ -70,7 +70,7 @@ def parse_args():
                         help='column name containg slide labels in teh annotation csv file')  
     parser.add_argument('--val_strategy', default = "fixed", type = str,
                         help='Select a validation stratergy: k-fold, k-fold-preserved-site, bootstrap, or fixed')    
-    parser.add_argument('--val_fraction', default = None, type = float,
+    parser.add_argument('--val_fraction', default = 0.2, type = float,
                         help='Fraction of dataset to use for validation testing, if strategy is "fixed".')
     parser.add_argument('--val_k_fold', default = None, type = float,
                         help='Total number of K if using K-fold validation. Defaults to 3.') 
@@ -80,15 +80,15 @@ def parse_args():
                         help='Path to cp.ckpt from which to load weights. Defaults to None.')
     parser.add_argument('--lr', default = 1e-4, type = int,
                         help='learning rate (default: 0.0001)')
-    parser.add_argument('--weight_decay', default = 1e-4, type = int,
-                            help='Weight decay. Only used if ``fit_one_cycle=False``. Defaults to 1e-5.')
+    parser.add_argument("--learning_rate_decay", type=float, default=None, help="Weight decay for regularization")
+    parser.add_argument('--learning_rate_decay_steps', type=int, default=10000, help='Number of steps between learning rate decay')
     parser.add_argument('--batch_size', default = 32, type = int,
                         help='Set batch size for training mil model')
     parser.add_argument('--epochs', default = 50, type = int,
                         help='number of epochs to train')
-    parser.add_argument('--min_tiles', default = 50000, type = int,
+    parser.add_argument('--min_tiles', default = 500, type = int,
                         help='Minimum number of tiles a slide must have to include in training. Defaults to 0.')
-    parser.add_argument('--max_tiles', default = 0, type = int,
+    parser.add_argument('--max_tiles', default = 1000, type = int,
                         help=' Only use up to this many tiles from each slide for training. Defaults to 0 (include all tiles)')
     parser.add_argument('--mixed_precision', default=True, action="store_true", 
                         help='Enable mixed precision. Defaults to True.')
@@ -99,6 +99,11 @@ def parse_args():
     parser.add_argument('--experiment_name', type=str, default=None, 
                         help='Path to save the mil model and predictions') 
     parser.add_argument("--name", default="default", help="name of the training run")
+    parser.add_argument("--optimizer", default="adam", help="name of the optimizer")     
+    parser.add_argument("--hidden_layers", default=10, type= int, help="Add final layers to models") 
+    parser.add_argument('--hidden_layer_width', type=int, default=10, help='Width of each hidden layer')
+    parser.add_argument("--early_stop_patience", default=10,type= int,  help="Patience for early stopping") 
+    parser.add_argument("--early_stop_method", default='accuracy',help="Select a method to peform early stopping: manual, accuracy, loss")  
     
     args = parser.parse_args()
 
@@ -119,6 +124,13 @@ def train_classifier(args,
         model = args.model,
         batch_size = args.batch_size,
         epochs = [args.epochs],
+        learning_rate = args.lr,
+        learning_rate_decay = args.learning_rate_decay,
+        learning_rate_decay_steps = args.learning_rate_decay_steps,
+        optimizer = args.optimizer,
+        hidden_layers = args.hidden_layers,
+        early_stop_patience = args.early_stop_patience,
+        early_stop_method = args.early_stop_method
     )    
     start_train = time.time()
     mlflow.start_run(run_name=args.name)
